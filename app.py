@@ -29,12 +29,13 @@ numero_secuencia = None
 
 @socketio.on('message')
 def on_message(*args):
-    response = [json.loads(data) for data in args][0]
     global numero_secuencia
+    response = [json.loads(data) for data in args][0]
 
     # Crear trama
     inicio = int(str(response["indicator"]), 2)
     numero_secuencia = response["sequence"]
+    rules.set_num_frames(response["frames"])
 
     flags = {
         "solicitar_confirmacion":response["requestConfirmation"],	
@@ -43,16 +44,26 @@ def on_message(*args):
         "enviar_confirmacion":response["sendConfirmation"],
     }
 
-    datos = response["message"]
+    datos = response.get("message") or ''
     trama = Trama(inicio, numero_secuencia, flags, datos)
 
-    # Reglas    
+    if not trama.es_valida():
+        rules.add_secuencia_tramas({
+            "error": f"Trama (Tx), la trama no cumple con las reglas",
+        })
+
+        secuencia_tramas = rules.get_secuencia_tramas()
+        socketio.emit('f-frame_sequence', secuencia_tramas)
+        return
+
+    # Reglas
     success, response_trama = rules.verificar_trama(trama)
 
     secuencia_tramas = rules.get_secuencia_tramas()
     socketio.emit('f-frame_sequence', secuencia_tramas)
 
     if success:
+        # Transmisor
         socketio.emit('f-message', {
             "indicator":trama.inicio,
             "sequence":trama.numero_secuencia,
@@ -63,6 +74,7 @@ def on_message(*args):
             "message":trama.datos,
         })
 
+        # Respuesta
         socketio.emit('f-response', {
             "indicator":response_trama.inicio,
             "sequence":response_trama.numero_secuencia,
@@ -78,22 +90,38 @@ def on_response(*args):
     global full_message
     global numero_secuencia
 
-    if numero_secuencia == 0:
+    if rules.rc == 0:
+        rules.rc = 1
+        rules.sc = 1
+        numero_secuencia = 1
         rules.add_secuencia_tramas({
-            "message": f"Trama {len(rules.get_secuencia_tramas())} (Rx) Control, listo para recibir",
+            "message": f"Trama (Rx) Control, listo para recibir",
         })
-        secuencia_tramas = rules.get_secuencia_tramas()
-        socketio.emit('f-frame_sequence', secuencia_tramas)
     else:
-        full_message += f"{args[0]} "
+        rules.sc = 1
+        full_message += f"{args[0]}"
         socketio.emit('f-full_message', full_message)
-    
-    numero_secuencia = numero_secuencia + 1
+        rules.add_secuencia_tramas({
+            "message": f"Trama (Rx) Datos, trama recibida",
+        })
+
+        if int(numero_secuencia) == int(rules.frames):
+            rules.rc = 0
+            numero_secuencia = 0
+            # TODO: Llamar un evento para que borre el mensaje y el número de frames.
+        else:
+            numero_secuencia += 1
+
+    secuencia_tramas = rules.get_secuencia_tramas()
+    socketio.emit('f-frame_sequence', secuencia_tramas)
     socketio.emit('f-current_plot', numero_secuencia)
     
 
 @socketio.on('disconnect')
 def on_disconnect():
+    rules.rc = 0
+    rules.sc = 0
+    rules.frames = 0
     rules.clean_tramas()
     rules.secuencia_tramas.clear()
     print("Cliente desconectado satisfactoriamente")
