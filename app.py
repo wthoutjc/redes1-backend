@@ -24,39 +24,78 @@ from src.trama.trama import Trama
 from src.rules.rules import Rules
 
 rules = Rules(socketio)
-secuencia_tramas = []
+full_message = ""
+numero_secuencia = None
 
 @socketio.on('message')
 def on_message(*args):
     response = [json.loads(data) for data in args][0]
+    global numero_secuencia
 
-    print(response["indicator"])
     # Crear trama
     inicio = int(str(response["indicator"]), 2)
     numero_secuencia = response["sequence"]
-    es_inicio_mensaje = response["startMessage"]
-    es_fin_mensaje = response["endMessage"]
-    solicitar_confirmacion = response["requestConfirmation"]
+
+    flags = {
+        "solicitar_confirmacion":response["requestConfirmation"],	
+        "es_inicio_mensaje":response["startMessage"],
+        "es_fin_mensaje":response["endMessage"],
+        "enviar_confirmacion":response["sendConfirmation"],
+    }
+
     datos = response["message"]
+    trama = Trama(inicio, numero_secuencia, flags, datos)
 
-    trama = Trama(inicio, numero_secuencia, es_inicio_mensaje, es_fin_mensaje, solicitar_confirmacion, datos)
-    rules.add_trama(trama)
+    # Reglas    
+    success, response_trama = rules.verificar_trama(trama)
 
-    numero_secuencia = trama.numero_secuencia + 1
-    socketio.emit('f-message', {
-        "indicator":trama.inicio,
-        "sequence":trama.numero_secuencia,
-        "startMessage":trama.es_inicio_mensaje,
-        "endMessage":trama.es_fin_mensaje,
-        "requestConfirmation":trama.solicitar_confirmacion,
-        "message":trama.datos,
-    })
+    secuencia_tramas = rules.get_secuencia_tramas()
+    socketio.emit('f-frame_sequence', secuencia_tramas)
+
+    if success:
+        socketio.emit('f-message', {
+            "indicator":trama.inicio,
+            "sequence":trama.numero_secuencia,
+            "startMessage":trama.flags["es_inicio_mensaje"],                # SM
+            "endMessage":trama.flags["es_fin_mensaje"],                     # EM
+            "requestConfirmation":trama.flags["solicitar_confirmacion"],    # RC
+            "sendConfirmation":trama.flags["enviar_confirmacion"],          # SC
+            "message":trama.datos,
+        })
+
+        socketio.emit('f-response', {
+            "indicator":response_trama.inicio,
+            "sequence":response_trama.numero_secuencia,
+            "startMessage":response_trama.flags["es_inicio_mensaje"],                # SM
+            "endMessage":response_trama.flags["es_fin_mensaje"],                     # EM
+            "requestConfirmation":response_trama.flags["solicitar_confirmacion"],    # RC
+            "sendConfirmation":response_trama.flags["enviar_confirmacion"],          # SC
+            "message":response_trama.datos,
+        })
+
+@socketio.on('b-response')
+def on_response(*args):
+    global full_message
+    global numero_secuencia
+
+    if numero_secuencia == 0:
+        rules.add_secuencia_tramas({
+            "message": f"Trama {len(rules.get_secuencia_tramas())} (Rx) Control, listo para recibir",
+        })
+        secuencia_tramas = rules.get_secuencia_tramas()
+        socketio.emit('f-frame_sequence', secuencia_tramas)
+    else:
+        full_message += f"{args[0]} "
+        socketio.emit('f-full_message', full_message)
+    
+    numero_secuencia = numero_secuencia + 1
     socketio.emit('f-current_plot', numero_secuencia)
+    
 
 @socketio.on('disconnect')
 def on_disconnect():
     rules.clean_tramas()
-    secuencia_tramas.clear()
+    rules.secuencia_tramas.clear()
     print("Cliente desconectado satisfactoriamente")
 
 if __name__ == '__main__':
