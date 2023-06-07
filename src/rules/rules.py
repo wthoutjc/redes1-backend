@@ -17,6 +17,7 @@ class Rules:
         verified = True
         error = None
         type_response = None
+        message = None
 
         if trama.flags["solicitar_confirmacion"] == 1:
             if self.rc == 1 and trama.numero_secuencia == 0:
@@ -25,30 +26,36 @@ class Rules:
             else:
                 type_response = "SC"
                 self.sc = 0
+                message = "Otorgar permiso a transmisor"
         else:
             if trama.numero_secuencia == 0:
                 verified = False
                 error = f"Trama (Rx), la trama no cumple con las reglas"
+                message = ""
             else:
                 if self.rc == 0:
                     verified = False
                     error = f"Trama (Rx), no ha solicitado permiso para transmitir [RC] = 0"
+                    message = ""
                 else:
                     if self.sc == 0:
                         verified = False
                         error = f"Trama (Rx), debe responder el receptor para continuar [SC] = 0"
+                        message = ""
                     else:
                         if int(trama.numero_secuencia) == int(self.frames) and trama.flags["es_fin_mensaje"] == 0:
                             verified = False
                             error = "Trama (Rx), la última trama debe habilitar el campo EM [EM] = 1"
+                            message = ""
                         else:
                             self.sc = 0
+                            message = "Certificar llegada de datos"
 
         if verified:
             self.secuencia_tramas.append({
                 "message": f"Trama (Tx) {trama.datos}",
             })
-            return True, self.generate_response_trama(trama, type_response)
+            return True, self.generate_response_trama(trama, type_response, message)
         else:
             self.secuencia_tramas.append({
                 "error": error if error else "Trama no válida",
@@ -56,11 +63,11 @@ class Rules:
             return False, None
 
 
-    def generate_response_trama(self, trama: 'Trama', type: str) -> 'Trama':
+    def generate_response_trama(self, trama: 'Trama', type: str, message: str = None) -> 'Trama':
         # Crear trama
         inicio = trama.inicio
         numero_secuencia = trama.numero_secuencia
-        datos = trama.datos
+        datos = message or trama.datos
 
         flags = {
             "es_inicio_mensaje": False,
