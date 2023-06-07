@@ -125,6 +125,7 @@ def on_response(*args):
             numero_secuencia = 0
             full_message = ""
             socketio.emit("f-reset", True)
+            socketio.emit('f-full_message', full_message)
         else:
             numero_secuencia += 1
 
