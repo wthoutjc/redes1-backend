@@ -69,7 +69,7 @@ class Rules:
         # Crear trama
         inicio = trama.inicio
         numero_secuencia = trama.numero_secuencia
-        datos = message or trama.datos
+        datos = trama.datos
 
         flags = {
             "es_inicio_mensaje": False,

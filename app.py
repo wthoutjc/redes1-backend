@@ -74,6 +74,16 @@ def on_message(*args):
             "message":trama.datos,
         })
 
+        print({
+            "indicator":response_trama.inicio,
+            "sequence":response_trama.numero_secuencia,
+            "startMessage":response_trama.flags["es_inicio_mensaje"],                # SM
+            "endMessage":response_trama.flags["es_fin_mensaje"],                     # EM
+            "requestConfirmation":response_trama.flags["solicitar_confirmacion"],    # RC
+            "sendConfirmation":response_trama.flags["enviar_confirmacion"],          # SC
+            "message":response_trama.datos,
+        })
+
         # Respuesta
         socketio.emit('f-response', {
             "indicator":response_trama.inicio,
@@ -90,7 +100,11 @@ def on_response(*args):
     global full_message
     global numero_secuencia
 
-    if rules.rc == 0:
+    if rules.sc != 0:
+        rules.add_secuencia_tramas({
+            "error": f"Trama (Rx) Control, no hay eventos para responder",
+        })
+    elif rules.rc == 0:
         rules.rc = 1
         rules.sc = 1
         numero_secuencia = 1
@@ -119,9 +133,14 @@ def on_response(*args):
 
 @socketio.on('disconnect')
 def on_disconnect():
+    global full_message
+    global numero_secuencia
+
     rules.rc = 0
     rules.sc = 0
     rules.frames = 0
+    full_message = ""
+    numero_secuencia = ""
     rules.clean_tramas()
     rules.secuencia_tramas.clear()
     print("Cliente desconectado satisfactoriamente")
