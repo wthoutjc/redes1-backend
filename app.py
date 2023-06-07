@@ -121,8 +121,10 @@ def on_response(*args):
 
         if int(numero_secuencia) == int(rules.frames):
             rules.rc = 0
+            rules.sc = 0
             numero_secuencia = 0
-            # TODO: Llamar un evento para que borre el mensaje y el número de frames.
+            full_message = ""
+            socketio.emit("f-reset", True)
         else:
             numero_secuencia += 1
 
