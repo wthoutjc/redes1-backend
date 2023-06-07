@@ -23,6 +23,7 @@ class Rules:
             if self.rc == 1 and trama.numero_secuencia == 0:
                 verified = False
                 error = f"Trama (Rx), ya solicitó permiso para transmitir [RC] = 1"
+                message = ""
             else:
                 type_response = "SC"
                 self.sc = 0
@@ -48,6 +49,7 @@ class Rules:
                             error = "Trama (Rx), la última trama debe habilitar el campo EM [EM] = 1"
                             message = ""
                         else:
+                            type_response = "SC"
                             self.sc = 0
                             message = "Certificar llegada de datos"
 
